@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
     # 6시간 타임아웃 방지용 (필요시 시간 조절)
     timeout-minutes: 360 
 
@@ -46,7 +47,6 @@ jobs:
 
       - name: Run Python Script
         env:
-          # GAS에서 보낸 client_payload 내의 message를 환경 변수로 할당
           TELEGRAM_MSG: ${{ github.event.client_payload.full_text }}
           CHAT_ID: ${{ github.event.client_payload.chat_id || secrets.CHAT_ID }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
