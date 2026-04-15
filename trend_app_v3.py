@@ -24,6 +24,7 @@ import pandas as pd
 from matplotlib import rc
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
+import html
 
 # urllib3 v2 compatibility: pytrends may pass deprecated method_whitelist to Retry
 try:
@@ -732,7 +733,9 @@ def build_summary_text():
     amore_headlines = fetch_news_headlines('아모레퍼시픽', max_results=10)
     if amore_headlines:
         for item in amore_headlines:
-            lines.append(f'- {item["title"]} | {item["link"]}')
+            title = html.escape(item['title'], quote=False)
+            url = html.escape(item['link'], quote=True)
+            lines.append(f'- <a href="{url}">{title}</a>')
     else:
         lines.append('⚠️ 아모레퍼시픽 관련 기사를 찾을 수 없습니다.')
 
@@ -752,7 +755,7 @@ def send_summary_trend_graphs(chat_id=None, top_n=3):
 
 def send_summary_report(chat_id=None):
     text = build_summary_text()
-    send_text_message(text, chat_id=chat_id)
+    send_text_message(text, chat_id=chat_id, parse_mode='HTML')
     send_summary_trend_graphs(chat_id=chat_id)
 
 
@@ -762,13 +765,16 @@ def send_status_report(chat_id=None):
     send_status_trend_graphs(chat_id=chat_id)
 
 
-def send_text_message(text, chat_id=None):
+def send_text_message(text, chat_id=None, parse_mode=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     targets = [chat_id] if chat_id else (list(started_chats) if started_chats else [CHAT_ID])
     any_success = False
     for t in targets:
         try:
-            resp = requests.post(url, data={'chat_id': t, 'text': text}, timeout=10)
+            data = {'chat_id': t, 'text': text}
+            if parse_mode:
+                data['parse_mode'] = parse_mode
+            resp = requests.post(url, data=data, timeout=10)
             if resp.ok:
                 logger.info(f"Telegram text sent successfully to {t}")
                 print(f"✅ 텔레그램 텍스트 전송 성공: chat_id={t}")
