@@ -56,6 +56,8 @@ DAILY_FETCH_INTERVAL = 10000  # 하루에 한 번만 새로 가져오기
 TELEGRAM_POLL_INTERVAL = 5  # Telegram getUpdates 폴링 주기
 CACHE_FILE = 'trend_cache.json'
 STARTED_CHATS_FILE = 'started_chats.json'
+NEWS_HISTORY_FILE = 'news_history.json'
+MAX_NEWS_HISTORY_ITEMS = 200
 
 USER_AGENTS = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -116,6 +118,44 @@ def save_keywords(keywords):
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(list(normalized), f, ensure_ascii=False)
     cleanup_cache_data()
+
+
+def load_news_history():
+    global seen_news_history, seen_news_set
+    seen_news_history.clear()
+    seen_news_set.clear()
+    if not os.path.exists(NEWS_HISTORY_FILE):
+        return
+    try:
+        with open(NEWS_HISTORY_FILE, 'r', encoding='utf-8') as f:
+            items = json.load(f)
+        for item in items:
+            if item:
+                seen_news_history.append(str(item))
+                seen_news_set.add(str(item))
+    except Exception as e:
+        logger.warning(f"Failed to load news history: {e}")
+
+
+def save_news_history():
+    try:
+        with open(NEWS_HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(seen_news_history, f, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Failed to save news history: {e}")
+
+
+def add_seen_news(item_key):
+    if item_key in seen_news_set:
+        return
+    seen_news_history.append(item_key)
+    seen_news_set.add(item_key)
+    if len(seen_news_history) > MAX_NEWS_HISTORY_ITEMS:
+        removed = seen_news_history[:len(seen_news_history) - MAX_NEWS_HISTORY_ITEMS]
+        for removed_item in removed:
+            seen_news_set.discard(removed_item)
+        del seen_news_history[:len(seen_news_history) - MAX_NEWS_HISTORY_ITEMS]
+    save_news_history()
 
 
 def cleanup_cache_data():
@@ -746,12 +786,27 @@ def build_summary_text():
 
     lines.append('')
     lines.append('📰 아모레퍼시픽 최신 기사')
-    amore_headlines = fetch_news_headlines('아모레퍼시픽', max_results=10)
-    if amore_headlines:
-        for item in amore_headlines:
+    amore_headlines = fetch_news_headlines('아모레퍼시픽', max_results=20)
+    new_headlines = []
+    for item in amore_headlines:
+        headline_key = item.get('link') or item.get('title')
+        if not headline_key:
+            continue
+        headline_key = str(headline_key).strip()
+        if headline_key in seen_news_set:
+            continue
+        new_headlines.append(item)
+        add_seen_news(headline_key)
+        if len(new_headlines) >= 10:
+            break
+
+    if new_headlines:
+        for item in new_headlines:
             title = html.escape(item['title'], quote=False)
             url = html.escape(item['link'], quote=True)
             lines.append(f'- <a href="{url}">{title}</a>')
+    elif amore_headlines:
+        lines.append('✅ 아모레퍼시픽 관련 기사 중 오늘은 새로운 기사가 없습니다. 기존에 이미 전송된 기사가 다시 검색되었습니다.')
     else:
         lines.append('⚠️ 아모레퍼시픽 관련 기사를 찾을 수 없습니다.')
 
@@ -897,9 +952,12 @@ last_scores = {}
 last_trend_data = {}
 last_fetch_time = {}
 started_chats = set()
+seen_news_history = []
+seen_news_set = set()
 
 load_cache()
 load_started_chats()
+load_news_history()
 
 def create_pytrends():
     return TrendReq(
