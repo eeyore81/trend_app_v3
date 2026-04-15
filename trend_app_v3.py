@@ -22,6 +22,8 @@ _KOREAN_FONT_PROP = None
 import platform
 import pandas as pd
 from matplotlib import rc
+from urllib.parse import quote_plus
+import xml.etree.ElementTree as ET
 
 # urllib3 v2 compatibility: pytrends may pass deprecated method_whitelist to Retry
 try:
@@ -191,6 +193,29 @@ def save_started_chats():
             json.dump(list(started_chats), f, ensure_ascii=False)
     except Exception as e:
         logger.warning(f"Failed to save started chats: {e}")
+
+
+def fetch_news_headlines(keyword, max_results=5):
+    """Google News RSS에서 제목+링크를 가져옵니다."""
+    try:
+        query = quote_plus(keyword)
+        rss_url = f"https://news.google.com/rss/search?q={query}%20when:7d&hl=ko&gl=KR&ceid=KR:ko"
+        resp = requests.get(rss_url, headers=get_request_headers(), timeout=10)
+        if not resp.ok:
+            logger.warning(f"Failed to fetch news RSS for {keyword}: {resp.status_code}")
+            return []
+        root = ET.fromstring(resp.content)
+        items = root.findall('.//item')
+        headlines = []
+        for item in items[:max_results]:
+            title = item.findtext('title')
+            link = item.findtext('link')
+            if title and link:
+                headlines.append({'title': title, 'link': link})
+        return headlines
+    except Exception as e:
+        logger.warning(f"Failed to parse news RSS for {keyword}: {e}")
+        return []
 
 
 # --- 공통 유틸: 그래프 생성 및 텔레그램 전송 헬퍼 ---
@@ -652,6 +677,15 @@ def build_summary_text():
                 reason = ', '.join(part for part in reason.split(', ') if part != pct)
             lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {reason})')
         lines.append('')
+
+        top_keyword = rising[0]['keyword'] if rising else None
+        if top_keyword:
+            headlines = fetch_news_headlines(top_keyword, max_results=5)
+            if headlines:
+                lines.append(f'📰 {top_keyword} 관련 최신 기사')
+                for item in headlines:
+                    lines.append(f'- {item["title"]} | {item["link"]}')
+                lines.append('')
 
     if falling:
         lines.append('🔻 하락 TOP 3')
