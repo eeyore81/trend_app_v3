@@ -710,17 +710,6 @@ def build_summary_text():
             lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {reason})')
         lines.append('')
 
-        top_keyword = rising[0]['keyword'] if rising else None
-        if top_keyword:
-            lines.append(f'📰 {top_keyword} 관련 최신 기사 검색 시도 중...')
-            headlines = fetch_news_headlines(top_keyword, max_results=5)
-            if headlines:
-                for item in headlines:
-                    lines.append(f'- {item["title"]} | {item["link"]}')
-            else:
-                lines.append('⚠️ 관련 기사를 찾을 수 없습니다. 검색어를 확인하거나 검색 범위를 넓혀보세요.')
-            lines.append('')
-
     if falling:
         lines.append('🔻 하락 TOP 3')
         for item in falling[:3]:
@@ -737,6 +726,15 @@ def build_summary_text():
             lines.append(f'- {item["keyword"]}: {item["reason"]} (현재 {item["score"]}점)')
     else:
         lines.append('✅ 현재 주목할 급등/급락 키워드가 없습니다.')
+
+    lines.append('')
+    lines.append('📰 아모레퍼시픽 최신 기사')
+    amore_headlines = fetch_news_headlines('아모레퍼시픽', max_results=10)
+    if amore_headlines:
+        for item in amore_headlines:
+            lines.append(f'- {item["title"]} | {item["link"]}')
+    else:
+        lines.append('⚠️ 아모레퍼시픽 관련 기사를 찾을 수 없습니다.')
 
     return '\n'.join(lines)
 
