@@ -647,14 +647,20 @@ def build_summary_text():
         lines.append('🔺 상승 TOP 3')
         for item in rising[:3]:
             pct = f'{item["pct_change"]:+.1f}%' if item['pct_change'] is not None else 'N/A'
-            lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {item["reason"]})')
+            reason = item['reason']
+            if item['pct_change'] is not None and pct in reason:
+                reason = ', '.join(part for part in reason.split(', ') if part != pct)
+            lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {reason})')
         lines.append('')
 
     if falling:
         lines.append('🔻 하락 TOP 3')
         for item in falling[:3]:
             pct = f'{item["pct_change"]:+.1f}%' if item['pct_change'] is not None else 'N/A'
-            lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {item["reason"]})')
+            reason = item['reason']
+            if item['pct_change'] is not None and pct in reason:
+                reason = ', '.join(part for part in reason.split(', ') if part != pct)
+            lines.append(f'- {item["keyword"]}: {item["score"]}점 ({pct}, {reason})')
         lines.append('')
 
     if alerts:
