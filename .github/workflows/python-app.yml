@@ -1,0 +1,65 @@
+name: Telegram Interactive Trend Bot
+
+on:
+  schedule:
+    - cron: '0 3/6 * * *'
+  repository_dispatch:
+      types: [telegram_trigger] # GAS에서 보낼 신호 이름
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 6시간 타임아웃 방지용 (필요시 시간 조절)
+    timeout-minutes: 360 
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 2. 캐시 설정 (이 부분을 추가하세요)
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          # requirements.txt 내용이 바뀔 때만 새로 설치하고, 아니면 캐시 사용
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 파일이 있는지 확인하고 있으면 설치, 없으면 에러 내지 않고 통과
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "requirements.txt를 찾을 수 없습니다!"
+            # 직접 필요한 것들을 명시해 줄 수도 있습니다.
+            pip install pytrends pandas matplotlib pyTelegramBotAPI
+          fi
+
+      - name: Run Python Script
+        env:
+          # GAS에서 보낸 client_payload 내의 message를 환경 변수로 할당
+          TELEGRAM_MSG: ${{ github.event.client_payload.full_text }}
+          CHAT_ID: ${{ github.event.client_payload.chat_id || secrets.CHAT_ID }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+        run: |
+          # 파이썬 실행 시 환경 변수를 인자로 전달
+          python trend_app_v3.py --message "$TELEGRAM_MSG" --chat_id "$CHAT_ID"
+
+      - name: Check in updated files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          # 변경사항이 있을 때만 커밋 (에러 방지)
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update cached data [skip ci]"
+          git push
