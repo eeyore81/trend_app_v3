@@ -7,6 +7,7 @@ import random
 import re
 import requests
 import io
+from datetime import datetime
 # Ensure Matplotlib has a writable config/cache directory in CI (prevents
 # permission issues and lets us rebuild the font cache reliably).
 mpl_config_dir = os.path.join(os.getcwd(), '.mplconfig')
@@ -278,7 +279,8 @@ def plot_trend_image(keyword, data, title=None, ymax=100, fill_between_col=None)
 
 def send_telegram_photo(buf, caption, chat_id=None, filename='graph.png'):
     buf.seek(0, io.SEEK_END)
-    if buf.tell() == 0:
+    size = buf.tell()
+    if size == 0:
         logger.warning("Telegram photo buffer is empty, falling back to text message")
         if chat_id:
             send_text_message(caption, chat_id=chat_id)
@@ -286,20 +288,32 @@ def send_telegram_photo(buf, caption, chat_id=None, filename='graph.png'):
             send_text_message(caption)
         return False
     buf.seek(0)
+    photo_data = buf.read()
+    if not photo_data:
+        logger.warning("Telegram photo data is empty after reading buffer, falling back to text message")
+        if chat_id:
+            send_text_message(caption, chat_id=chat_id)
+        else:
+            send_text_message(caption)
+        return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-    files = {'photo': (filename, buf, 'image/png')}
     targets = [chat_id] if chat_id else (list(started_chats) if started_chats else [CHAT_ID])
     any_success = False
     for t in targets:
         try:
-            resp = requests.post(url, data={'chat_id': t, 'caption': caption}, files=files, timeout=10)
+            resp = requests.post(
+                url,
+                data={'chat_id': t, 'caption': caption},
+                files={'photo': (filename, photo_data, 'image/png')},
+                timeout=10
+            )
             if resp.ok:
-                logger.info(f"Telegram photo sent, chat_id={t}")
+                logger.info(f"Telegram photo sent, chat_id={t}, size={size}")
                 print(f"✅ 텔레그램 전송 성공: chat_id={t}")
                 any_success = True
             else:
-                logger.error(f"Telegram photo failed: status={resp.status_code}, response={resp.text}, chat_id={t}")
+                logger.error(f"Telegram photo failed: status={resp.status_code}, response={resp.text}, chat_id={t}, size={size}")
                 print(f"❌ 텔레그램 전송 실패: status={resp.status_code}, response={resp.text}, chat_id={t}")
                 if resp.status_code == 400:
                     logger.warning("Bad request on sendPhoto, falling back to text message")
@@ -694,7 +708,9 @@ def build_summary_text():
     falling = sorted(metrics, key=lambda item: (item['pct_change'] if item['pct_change'] is not None else (item['diff'] or 0)))
     alerts = [item for item in metrics if item['reason'] != '보통']
 
+    now = datetime.now().strftime('%Y-%m-%d %H:%M')
     lines = [
+        f'📅 {now} 요약',
         '📊 트렌드 요약 리포트',
         f'총 감시 키워드: {len(keywords)}',
         f'유효 데이터 키워드: {len(metrics)}',
