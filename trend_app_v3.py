@@ -198,9 +198,14 @@ def save_started_chats():
 def fetch_news_headlines(keyword, max_results=5):
     """Google News RSS에서 제목+링크를 가져옵니다."""
     try:
-        query = quote_plus(keyword)
-        rss_url = f"https://news.google.com/rss/search?q={query}%20when:7d&hl=ko&gl=KR&ceid=KR:ko"
-        resp = requests.get(rss_url, headers=get_request_headers(), timeout=10)
+        rss_url = 'https://news.google.com/rss/search'
+        params = {
+            'q': f'{keyword} when:7d',
+            'hl': 'ko',
+            'gl': 'KR',
+            'ceid': 'KR:ko'
+        }
+        resp = requests.get(rss_url, params=params, headers=get_request_headers(), timeout=10)
         if not resp.ok:
             logger.warning(f"Failed to fetch news RSS for {keyword}: {resp.status_code}")
             return []
@@ -209,12 +214,26 @@ def fetch_news_headlines(keyword, max_results=5):
         headlines = []
         for item in items[:max_results]:
             title = item.findtext('title')
-            link = item.findtext('link')
+            link = item.findtext('link') or item.findtext('guid')
             if title and link:
                 headlines.append({'title': title, 'link': link})
+        if headlines:
+            return headlines
+
+        # fallback: 검색어만으로 다시 시도
+        params['q'] = keyword
+        resp = requests.get(rss_url, params=params, headers=get_request_headers(), timeout=10)
+        if resp.ok:
+            root = ET.fromstring(resp.content)
+            items = root.findall('.//item')
+            for item in items[:max_results]:
+                title = item.findtext('title')
+                link = item.findtext('link') or item.findtext('guid')
+                if title and link:
+                    headlines.append({'title': title, 'link': link})
         return headlines
     except Exception as e:
-        logger.warning(f"Failed to parse news RSS for {keyword}: {e}")
+        logger.warning(f"Failed to fetch news RSS for {keyword}: {e}")
         return []
 
 
