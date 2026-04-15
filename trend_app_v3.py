@@ -712,12 +712,14 @@ def build_summary_text():
 
         top_keyword = rising[0]['keyword'] if rising else None
         if top_keyword:
+            lines.append(f'📰 {top_keyword} 관련 최신 기사 검색 시도 중...')
             headlines = fetch_news_headlines(top_keyword, max_results=5)
             if headlines:
-                lines.append(f'📰 {top_keyword} 관련 최신 기사')
                 for item in headlines:
                     lines.append(f'- {item["title"]} | {item["link"]}')
-                lines.append('')
+            else:
+                lines.append('⚠️ 관련 기사를 찾을 수 없습니다. 검색어를 확인하거나 검색 범위를 넓혀보세요.')
+            lines.append('')
 
     if falling:
         lines.append('🔻 하락 TOP 3')
